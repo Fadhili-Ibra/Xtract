@@ -4,6 +4,8 @@ import streamlit as st
 from PIL import Image
 import pytesseract
 import re
+import fitz  # PyMuPDF for PDF handling
+import io
 
 def main():
     show_images_page()
@@ -35,27 +37,42 @@ def extract_id_data(text):
     return id_data
 
 def show_images_page():
-    st.subheader("Extract Data from ID Documents")
+    st.subheader("Extract Data from ID Documents (Image or PDF)")
 
-    # Upload image
-    uploaded_image = st.file_uploader("Upload Image", type=['png', 'jpeg', 'jpg'])
+    # Allow the user to upload either an image or a PDF
+    uploaded_file = st.file_uploader("Upload Image or PDF", type=['png', 'jpeg', 'jpg', 'pdf'])
 
-    if uploaded_image is not None:
-        image = Image.open(uploaded_image)
-        st.image(image, caption="Uploaded Image", use_column_width=True)
+    if uploaded_file is not None:
+        if uploaded_file.type == "application/pdf":
+            # Handle PDF file
+            pdf_content = uploaded_file.read()
+            pdf_doc = fitz.open(stream=io.BytesIO(pdf_content), filetype="pdf")
+            
+            extracted_text = ""
+            for page_num in range(pdf_doc.page_count):
+                page = pdf_doc.load_page(page_num)
+                extracted_text += page.get_text()
+            
+            st.subheader("Extracted Text from PDF")
+            st.text_area("Extracted Data", extracted_text, height=300)
 
-        # Extract text using Tesseract
-        extracted_text = pytesseract.image_to_string(image)
+        else:
+            # Handle image file
+            image = Image.open(uploaded_file)
+            st.image(image, caption="Uploaded Image", use_column_width=True)
 
-        # Display the extracted text
-        st.subheader("Extracted Text")
-        st.text_area("Extracted Data", extracted_text, height=300)
+            # Extract text using Tesseract
+            extracted_text = pytesseract.image_to_string(image)
 
-        # Extract ID data using regex patterns
+            # Display the extracted text
+            st.subheader("Extracted Text from Image")
+            st.text_area("Extracted Data", extracted_text, height=300)
+
+        # Extract ID data using regex patterns from the extracted text
         id_data = extract_id_data(extracted_text)
 
         # Create a form-like structure for editing the ID data
-        if id_data["ID Number"] is not None:
+        if any(id_data.values()):  # Check if any data is extracted
             st.write("### Extracted ID Data")
 
             # Set up a form for editing the extracted data
